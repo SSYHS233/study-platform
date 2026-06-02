@@ -128,6 +128,9 @@ var SSYHSAuth = (function() {
         '.auth-modal{width:92%;padding:18px;border-radius:14px}' +
         '.auth-help-modal{max-width:none;width:95%}' +
         '.auth-modal-user-code{font-size:24px;letter-spacing:3px;padding:10px 14px}' +
+        '.topbar{gap:8px;padding:0 12px}' +
+        '.topbar-counter{display:none}' +
+        '.topbar-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}' +
       '}' +
       '@media(max-width:400px){' +
         '.auth-login-btn{padding:6px;border-radius:6px}' +
