@@ -173,6 +173,16 @@
         }
       }
       localStorage.setItem('study-platform-imported', JSON.stringify(imported));
+
+      // Save subject overrides for non-custom questions so renames persist
+      var subjectOverrides = {};
+      for (var j = 0; j < QUESTIONS.length; j++) {
+        var qid = QUESTIONS[j].id;
+        if (edits[qid] && edits[qid].subject && !(edits[qid] && edits[qid].custom)) {
+          subjectOverrides[qid] = edits[qid].subject;
+        }
+      }
+      localStorage.setItem('study-platform-subjects', JSON.stringify(subjectOverrides));
     } catch(e) {}
   }
 
@@ -183,7 +193,6 @@
       if (saved) {
         var imported = JSON.parse(saved);
         for (var i = 0; i < imported.length; i++) {
-          // Check if already exists
           var exists = false;
           for (var j = 0; j < QUESTIONS.length; j++) {
             if (QUESTIONS[j].id === imported[i].id) {
@@ -193,6 +202,18 @@
           }
           if (!exists) {
             QUESTIONS.push(imported[i]);
+          }
+        }
+      }
+
+      // Load subject overrides for non-custom questions
+      var overrides = localStorage.getItem('study-platform-subjects');
+      if (overrides) {
+        var subjectMap = JSON.parse(overrides);
+        for (var k = 0; k < QUESTIONS.length; k++) {
+          if (subjectMap[QUESTIONS[k].id] && (!edits[QUESTIONS[k].id] || !edits[QUESTIONS[k].id].custom)) {
+            if (!edits[QUESTIONS[k].id]) edits[QUESTIONS[k].id] = {};
+            edits[QUESTIONS[k].id].subject = subjectMap[QUESTIONS[k].id];
           }
         }
       }
