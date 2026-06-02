@@ -13,6 +13,8 @@
   let shuffled = false;
   let typingAnswers = {};
   let searchQuery = '';
+  let currentSubject = 'all';
+  let currentChapter = 'all';
 
   // Load persisted state
   let state = loadState();
@@ -36,8 +38,6 @@
   const markText = document.getElementById('markText');
   const prevBtn = document.getElementById('prevBtn');
   const nextBtn = document.getElementById('nextBtn');
-  const flipBtn = document.getElementById('flipBtn');
-  const flipText = document.getElementById('flipText');
   const editBtn = document.getElementById('editBtn');
   const modeAll = document.getElementById('modeAll');
   const modeMarked = document.getElementById('modeMarked');
@@ -103,6 +103,10 @@
   const manageSelectCustom = document.getElementById('manageSelectCustom');
   const manageDeleteSelected = document.getElementById('manageDeleteSelected');
   const manageDeleteAllCustom = document.getElementById('manageDeleteAllCustom');
+  const manageSubjectFilter = document.getElementById('manageSubjectFilter');
+  const manageNewSubject = document.getElementById('manageNewSubject');
+  const manageExistingSubject = document.getElementById('manageExistingSubject');
+  const manageMoveBtn = document.getElementById('manageMoveBtn');
 
   // New features
   const darkModeBtn = document.getElementById('darkModeBtn');
@@ -123,6 +127,24 @@
   const learnedUpBtn = document.getElementById('learnedUpBtn');
   const allCountHint = document.getElementById('allCountHint');
   const editNote = document.getElementById('editNote');
+  const chapterSelect = document.getElementById('chapterSelect');
+  const subjectSelect = document.getElementById('subjectSelect');
+  const importSubject = document.getElementById('importSubject');
+  const editSubject = document.getElementById('editSubject');
+  const learnedCount = document.getElementById('learnedCount');
+  const manageSubjectBtn = document.getElementById('manageSubjectBtn');
+  const subjectTreeModal = document.getElementById('subjectTreeModal');
+  const subjectTreeClose = document.getElementById('subjectTreeClose');
+  const stAddInput = document.getElementById('stAddInput');
+  const stAddBtn = document.getElementById('stAddBtn');
+  const stTree = document.getElementById('stTree');
+  const toastEl = document.getElementById('toast');
+  const subjectProgressList = document.getElementById('subjectProgressList');
+  const aboutBtn = document.getElementById('aboutBtn');
+  const aboutModal = document.getElementById('aboutModal');
+  const aboutClose = document.getElementById('aboutClose');
+  const learnedWrapper = document.getElementById('learnedWrapper');
+  const learnedPopup = document.getElementById('learnedPopup');
 
   // ============================================
   // State Management
@@ -175,6 +197,17 @@
         }
       }
     } catch(e) {}
+  }
+
+  // ============================================
+  // Toast
+  // ============================================
+  var toastTimer = null;
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function() { toastEl.classList.remove('show'); }, 800);
   }
 
   // ============================================
@@ -267,6 +300,7 @@
     if (edits[qid]) {
       return {
         id: original.id,
+        subject: edits[qid].subject || original.subject || '',
         chapter: edits[qid].chapter || original.chapter,
         question: edits[qid].question || original.question,
         answer: edits[qid].answer || original.answer,
@@ -274,7 +308,7 @@
         note: notes[qid] || ''
       };
     }
-    return Object.assign({}, original, { note: notes[qid] || '' });
+    return Object.assign({}, original, { subject: original.subject || '', note: notes[qid] || '' });
   }
 
   // Get all questions with edits applied
@@ -292,6 +326,7 @@
     var q = getQuestion(qid);
     if (!q) return;
 
+    editSubject.value = q.subject || '';
     editChapter.value = q.chapter || '';
     editQuestion.value = q.question || '';
     editAnswer.value = q.answer || '';
@@ -314,6 +349,7 @@
     if (!editingQid) return;
 
     edits[editingQid] = {
+      subject: editSubject.value.trim(),
       chapter: editChapter.value.trim(),
       question: editQuestion.value.trim(),
       answer: editAnswer.value.trim(),
@@ -332,6 +368,8 @@
     saveEdits();
     saveNotes();
     saveImportedQuestions();
+    populateSubjectSelect();
+    populateChapterSelect();
     closeEditModal();
     render();
   }
@@ -369,6 +407,8 @@
         saveEdits();
         closeEditModal();
         if (currentIndex > 0) currentIndex--;
+        populateSubjectSelect();
+        populateChapterSelect();
         render();
       }
     } else {
@@ -387,6 +427,7 @@
     // Add to QUESTIONS
     var newQ = {
       id: newId,
+      subject: '自定义',
       chapter: '自定义',
       question: '新题目',
       answer: '请填写答案',
@@ -396,6 +437,7 @@
 
     // Mark as custom in edits
     edits[newId] = {
+      subject: '自定义',
       chapter: '自定义',
       question: '新题目',
       answer: '请填写答案',
@@ -404,6 +446,8 @@
     };
     saveEdits();
     saveImportedQuestions();
+    populateSubjectSelect();
+    populateChapterSelect();
 
     // Open edit modal for the new question
     openEditModal(newId);
@@ -428,6 +472,16 @@
     } else {
       // 'all' mode - exclude mastered
       filtered = filtered.filter(function(q) { return !state.mastered || !state.mastered.includes(q.id); });
+    }
+
+    // Filter by subject
+    if (currentSubject !== 'all') {
+      filtered = filtered.filter(function(q) { return (q.subject || '未分类') === currentSubject; });
+    }
+
+    // Filter by chapter
+    if (currentChapter !== 'all') {
+      filtered = filtered.filter(function(q) { return q.chapter === currentChapter; });
     }
 
     // Filter by search
@@ -551,18 +605,19 @@
     markText.textContent = isMarked ? '取消标记' : '标记';
 
     var isMastered = state.mastered && state.mastered.includes(q.id);
-    masteredBtn.classList.toggle('mastered', isMastered);
+    masteredBtn.classList.toggle('mastered-active', isMastered);
     masteredText.textContent = isMastered ? '继续背' : '不背了';
 
     // 显示学习次数
-    var learnedCount = state.learnedCounts ? (state.learnedCounts[q.id] || 0) : 0;
-    if (learnedCount > 0) {
-      learnedText.textContent = '背了(' + learnedCount + ')';
+    var lc = state.learnedCounts ? (state.learnedCounts[q.id] || 0) : 0;
+    if (lc > 0) {
+      learnedText.textContent = '背了(' + lc + ')';
       learnedBtn.classList.add('learned');
     } else {
       learnedText.textContent = '背了';
       learnedBtn.classList.remove('learned');
     }
+    learnedCount.textContent = lc;
 
     // Show edit indicator if question has been edited
     if (edits[q.id]) {
@@ -587,7 +642,9 @@
 
     renderStudyMode(q);
     renderQuestionList();
+    scrollToListItem();
     updateStats();
+    renderSubjectProgress();
   }
 
   function renderStudyMode(q) {
@@ -713,40 +770,204 @@
   // ============================================
   // Stats & List
   // ============================================
+  // Track expanded sections
+  var expandedSections = {};
+
   function renderQuestionList() {
     var filtered = getFilteredQuestions();
     questionList.innerHTML = '';
+
+    // Group by subject → chapter
+    var subjects = {};
+    var subjectOrder = [];
     for (var i = 0; i < filtered.length; i++) {
-      var q = filtered[i];
-      var item = document.createElement('div');
-      item.className = 'question-item' + (i === currentIndex ? ' active' : '');
+      var subj = filtered[i].subject || '未分类';
+      var ch = filtered[i].chapter || '未分类';
+      if (!subjects[subj]) {
+        subjects[subj] = {};
+        subjectOrder.push(subj);
+      }
+      if (!subjects[subj][ch]) {
+        subjects[subj][ch] = [];
+      }
+      subjects[subj][ch].push({ q: filtered[i], globalIdx: i });
+    }
 
-      var icon = document.createElement('span');
-      icon.className = 'q-icon';
-      icon.title = '点击标记已学会';
-      if (state.marked.includes(q.id)) { icon.className += ' marked'; icon.textContent = '★'; }
-      else if (state.viewed.includes(q.id)) { icon.className += ' seen'; icon.textContent = '✓'; }
-      else { icon.className += ' unseen'; icon.textContent = '·'; }
+    for (var si = 0; si < subjectOrder.length; si++) {
+      var subjectName = subjectOrder[si];
+      var chapters = subjects[subjectName];
+      var chapterKeys = Object.keys(chapters);
+      var totalInSubject = 0;
+      for (var ck = 0; ck < chapterKeys.length; ck++) totalInSubject += chapters[chapterKeys[ck]].length;
 
-      // Click icon to toggle viewed
-      (function(qid, e) {
-        icon.onclick = function(ev) {
-          ev.stopPropagation();
-          toggleViewed(qid);
+      var subjectSection = document.createElement('div');
+      subjectSection.className = 'chapter-section';
+
+      // Subject header
+      var subjectHeader = document.createElement('div');
+      subjectHeader.className = 'chapter-header';
+      subjectHeader.style.fontWeight = '700';
+
+      var subjectArrow = document.createElement('span');
+      subjectArrow.className = 'chapter-arrow' + (expandedSections['s:'+subjectName] ? ' expanded' : '');
+      subjectArrow.textContent = '▶';
+
+      var subjectLabel = document.createElement('span');
+      subjectLabel.className = 'chapter-name';
+      subjectLabel.textContent = '📁 ' + subjectName;
+
+      var subjectCount = document.createElement('span');
+      subjectCount.className = 'chapter-count';
+      subjectCount.textContent = totalInSubject;
+
+      subjectHeader.appendChild(subjectArrow);
+      subjectHeader.appendChild(subjectLabel);
+      subjectHeader.appendChild(subjectCount);
+
+      var subjectBody = document.createElement('div');
+      subjectBody.className = 'chapter-items' + (expandedSections['s:'+subjectName] ? ' expanded' : '');
+
+      // Toggle subject expand/collapse
+      (function(sn, hdr, arr, body) {
+        hdr.onclick = function() {
+          expandedSections['s:'+sn] = !expandedSections['s:'+sn];
+          arr.classList.toggle('expanded', expandedSections['s:'+sn]);
+          body.classList.toggle('expanded', expandedSections['s:'+sn]);
         };
-      })(q.id);
+      })(subjectName, subjectHeader, subjectArrow, subjectBody);
 
-      // Click item to select question
-      (function(idx) {
-        item.onclick = function() { currentIndex = idx; render(); };
-      })(i);
+      // Chapters inside subject
+      for (var ci = 0; ci < chapterKeys.length; ci++) {
+        var chapterName = chapterKeys[ci];
+        var items = chapters[chapterName];
 
-      var text = document.createElement('span');
-      text.textContent = q.question.length > 40 ? q.question.substring(0, 40) + '...' : q.question;
+        var section = document.createElement('div');
+        section.className = 'chapter-section';
 
-      item.appendChild(icon);
-      item.appendChild(text);
-      questionList.appendChild(item);
+        var header = document.createElement('div');
+        header.className = 'chapter-header';
+
+        var arrow = document.createElement('span');
+        arrow.className = 'chapter-arrow' + (expandedSections['c:'+subjectName+':'+chapterName] ? ' expanded' : '');
+        arrow.textContent = '▶';
+
+        var name = document.createElement('span');
+        name.className = 'chapter-name';
+        name.textContent = chapterName;
+
+        var count = document.createElement('span');
+        count.className = 'chapter-count';
+        count.textContent = items.length;
+
+        header.appendChild(arrow);
+        header.appendChild(name);
+        header.appendChild(count);
+
+        var itemsContainer = document.createElement('div');
+        itemsContainer.className = 'chapter-items' + (expandedSections['c:'+subjectName+':'+chapterName] ? ' expanded' : '');
+
+        for (var qi = 0; qi < items.length; qi++) {
+          var q = items[qi].q;
+          var globalIdx = items[qi].globalIdx;
+          var item = document.createElement('div');
+          item.className = 'question-item' + (globalIdx === currentIndex ? ' active' : '');
+
+          var icon = document.createElement('span');
+          icon.className = 'q-icon';
+          icon.title = '点击标记已学会';
+          if (state.marked.includes(q.id)) { icon.className += ' marked'; icon.textContent = '★'; }
+          else if (state.viewed.includes(q.id)) { icon.className += ' seen'; icon.textContent = '✓'; }
+          else { icon.className += ' unseen'; icon.textContent = '·'; }
+
+          (function(qid) {
+            icon.onclick = function(ev) {
+              ev.stopPropagation();
+              toggleViewed(qid);
+            };
+          })(q.id);
+
+          (function(idx) {
+            item.onclick = function() { currentIndex = idx; render(); };
+          })(globalIdx);
+
+          var text = document.createElement('span');
+          text.textContent = q.question.length > 40 ? q.question.substring(0, 40) + '...' : q.question;
+
+          item.appendChild(icon);
+          item.appendChild(text);
+          itemsContainer.appendChild(item);
+        }
+
+        (function(cn, sn, hdr2, arr2, cont) {
+          hdr2.onclick = function() {
+            var key = 'c:'+sn+':'+cn;
+            expandedSections[key] = !expandedSections[key];
+            arr2.classList.toggle('expanded', expandedSections[key]);
+            cont.classList.toggle('expanded', expandedSections[key]);
+          };
+        })(chapterName, subjectName, header, arrow, itemsContainer);
+
+        section.appendChild(header);
+        section.appendChild(itemsContainer);
+        subjectBody.appendChild(section);
+      }
+
+      subjectSection.appendChild(subjectHeader);
+      subjectSection.appendChild(subjectBody);
+      questionList.appendChild(subjectSection);
+    }
+  }
+
+  function getQuestionSubject(q) {
+    if (edits[q.id] && edits[q.id].subject) return edits[q.id].subject;
+    return q.subject || '';
+  }
+
+  function populateSubjectSelect() {
+    var subjects = {};
+    for (var i = 0; i < QUESTIONS.length; i++) {
+      var s = getQuestionSubject(QUESTIONS[i]) || '未分类';
+      subjects[s] = true;
+    }
+    var currentVal = subjectSelect.value;
+    subjectSelect.innerHTML = '<option value="all">全部科目</option>';
+    var keys = Object.keys(subjects);
+    for (var j = 0; j < keys.length; j++) {
+      var opt = document.createElement('option');
+      opt.value = keys[j];
+      opt.textContent = keys[j];
+      subjectSelect.appendChild(opt);
+    }
+    if (currentVal && currentVal !== 'all' && subjects[currentVal]) {
+      subjectSelect.value = currentVal;
+    } else {
+      subjectSelect.value = 'all';
+      currentSubject = 'all';
+    }
+  }
+
+  function populateChapterSelect() {
+    var chapters = {};
+    for (var i = 0; i < QUESTIONS.length; i++) {
+      var s = getQuestionSubject(QUESTIONS[i]) || '未分类';
+      if (currentSubject !== 'all' && s !== currentSubject) continue;
+      var ch = (edits[QUESTIONS[i].id] && edits[QUESTIONS[i].id].chapter) || QUESTIONS[i].chapter || '未分类';
+      chapters[ch] = true;
+    }
+    var currentVal = chapterSelect.value;
+    chapterSelect.innerHTML = '<option value="all">全部章节</option>';
+    var keys = Object.keys(chapters);
+    for (var j = 0; j < keys.length; j++) {
+      var opt = document.createElement('option');
+      opt.value = keys[j];
+      opt.textContent = keys[j];
+      chapterSelect.appendChild(opt);
+    }
+    if (currentVal && currentVal !== 'all' && chapters[currentVal]) {
+      chapterSelect.value = currentVal;
+    } else {
+      chapterSelect.value = 'all';
+      currentChapter = 'all';
     }
   }
 
@@ -774,6 +995,88 @@
     allCountHint.textContent = '(' + total + ')';
   }
 
+  function scrollToListItem() {
+    var active = questionList.querySelector('.question-item.active');
+    if (active) {
+      // Expand parent chapter if collapsed
+      var chapterItems = active.closest('.chapter-items');
+      if (chapterItems && !chapterItems.classList.contains('expanded')) {
+        chapterItems.classList.add('expanded');
+        var arrow = chapterItems.previousElementSibling;
+        if (arrow) {
+          var arrSpan = arrow.querySelector('.chapter-arrow');
+          if (arrSpan) arrSpan.classList.add('expanded');
+        }
+      }
+      // Expand parent subject if collapsed
+      var subjectBody = active.closest('.st-body') || active.closest('.chapter-items');
+      if (subjectBody) {
+        var parentSubject = subjectBody.closest('.st-subject') || subjectBody.parentElement;
+        if (parentSubject) {
+          var subjBody = parentSubject.querySelector('.st-body');
+          if (subjBody && !subjBody.classList.contains('expanded')) {
+            subjBody.classList.add('expanded');
+            var subjArrow = parentSubject.querySelector('.st-arrow');
+            if (subjArrow) subjArrow.classList.add('expanded');
+          }
+        }
+      }
+      active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+
+  var spColors = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16'];
+
+  function renderSubjectProgress() {
+    subjectProgressList.innerHTML = '';
+    var subjects = {};
+    var subjectOrder = [];
+    for (var i = 0; i < QUESTIONS.length; i++) {
+      var subj = getQuestionSubject(QUESTIONS[i]) || '未分类';
+      if (!subjects[subj]) { subjects[subj] = { total: 0, viewed: 0 }; subjectOrder.push(subj); }
+      subjects[subj].total++;
+      if (state.viewed.includes(QUESTIONS[i].id)) subjects[subj].viewed++;
+    }
+
+    for (var j = 0; j < subjectOrder.length; j++) {
+      var name = subjectOrder[j];
+      var data = subjects[name];
+      var pct = data.total > 0 ? Math.round((data.viewed / data.total) * 100) : 0;
+      var color = spColors[j % spColors.length];
+
+      var item = document.createElement('div');
+      item.className = 'sp-item';
+
+      var header = document.createElement('div');
+      header.className = 'sp-header';
+
+      var nameSpan = document.createElement('span');
+      nameSpan.className = 'sp-name';
+      nameSpan.textContent = name;
+      nameSpan.title = name;
+
+      var statsSpan = document.createElement('span');
+      statsSpan.className = 'sp-stats';
+      statsSpan.textContent = data.viewed + '/' + data.total + ' ' + pct + '%';
+
+      header.appendChild(nameSpan);
+      header.appendChild(statsSpan);
+
+      var barBg = document.createElement('div');
+      barBg.className = 'sp-bar-bg';
+      var bar = document.createElement('div');
+      bar.className = 'sp-bar';
+      bar.style.background = color;
+      // Trigger reflow for animation
+      requestAnimationFrame(function(b, p) { b.style.width = p + '%'; }.bind(null, bar, pct));
+
+      barBg.appendChild(bar);
+      item.appendChild(header);
+      item.appendChild(barBg);
+      subjectProgressList.appendChild(item);
+    }
+  }
+
   // ============================================
   // Actions
   // ============================================
@@ -797,8 +1100,8 @@
     if (filtered.length === 0) return;
     var q = filtered[currentIndex];
     var idx = state.marked.indexOf(q.id);
-    if (idx === -1) state.marked.push(q.id);
-    else state.marked.splice(idx, 1);
+    if (idx === -1) { state.marked.push(q.id); showToast('已标记'); }
+    else { state.marked.splice(idx, 1); showToast('已取消'); }
     saveState();
     render();
   }
@@ -809,8 +1112,8 @@
     var q = filtered[currentIndex];
     if (!state.mastered) state.mastered = [];
     var idx = state.mastered.indexOf(q.id);
-    if (idx === -1) state.mastered.push(q.id);
-    else state.mastered.splice(idx, 1);
+    if (idx === -1) { state.mastered.push(q.id); showToast('跳过'); }
+    else { state.mastered.splice(idx, 1); showToast('已恢复'); }
     saveState();
     render();
   }
@@ -822,6 +1125,8 @@
     if (!state.learnedCounts) state.learnedCounts = {};
     state.learnedCounts[q.id] = (state.learnedCounts[q.id] || 0) + 1;
     saveState();
+    learnedPopup.classList.remove('show');
+    showToast('+' + state.learnedCounts[q.id]);
     render();
   }
 
@@ -833,8 +1138,10 @@
     var count = state.learnedCounts[q.id] || 0;
     if (count > 0) {
       state.learnedCounts[q.id] = count - 1;
+      showToast('' + state.learnedCounts[q.id]);
     }
     saveState();
+    learnedPopup.classList.remove('show');
     render();
   }
 
@@ -954,7 +1261,7 @@
 
   function toggleShuffle() {
     shuffled = !shuffled;
-    shuffleBtn.textContent = shuffled ? '📋 顺序排列' : '🔀 随机顺序';
+    shuffleBtn.innerHTML = shuffled ? '<span class="tool-icon">📋</span>顺序' : '<span class="tool-icon">🔀</span>随机';
     currentIndex = 0;
     render();
   }
@@ -1098,7 +1405,8 @@
       return;
     }
 
-    var html = '<div class="import-count">解析到 ' + importParsed.length + ' 道题目</div>';
+    var subject = importSubject.value.trim() || '未分类';
+    var html = '<div class="import-count">科目: ' + escapeHtml(subject) + ' | 解析到 ' + importParsed.length + ' 道题目</div>';
     html += '<div class="import-list">';
     for (var i = 0; i < importParsed.length; i++) {
       var q = importParsed[i];
@@ -1117,6 +1425,8 @@
   function confirmImport() {
     if (importParsed.length === 0) return;
 
+    var subject = importSubject.value.trim() || '未分类';
+
     // Find max id
     var maxId = 0;
     for (var i = 0; i < QUESTIONS.length; i++) {
@@ -1129,6 +1439,7 @@
       var newId = maxId + j + 1;
       var newQ = {
         id: newId,
+        subject: subject,
         chapter: importParsed[j].chapter,
         question: importParsed[j].question,
         answer: importParsed[j].answer,
@@ -1138,6 +1449,7 @@
 
       // Mark as custom
       edits[newId] = {
+        subject: subject,
         chapter: importParsed[j].chapter,
         question: importParsed[j].question,
         answer: importParsed[j].answer,
@@ -1150,6 +1462,9 @@
     saveEdits();
     saveImportedQuestions();
     hideImportModal();
+    importSubject.value = '';
+    populateSubjectSelect();
+    populateChapterSelect();
     render();
     alert('成功导入 ' + count + ' 道题目！');
   }
@@ -1159,9 +1474,46 @@
   // ============================================
   var manageSelected = new Set();
 
+  var manageSubjectFilterVal = 'all';
+
+  function populateManageSubjectDropdowns() {
+    var subjects = {};
+    for (var i = 0; i < QUESTIONS.length; i++) {
+      var s = getQuestionSubject(QUESTIONS[i]) || '未分类';
+      subjects[s] = true;
+    }
+    var keys = Object.keys(subjects);
+
+    // Filter dropdown
+    var filterVal = manageSubjectFilter.value;
+    manageSubjectFilter.innerHTML = '<option value="all">全部科目</option>';
+    for (var j = 0; j < keys.length; j++) {
+      var opt = document.createElement('option');
+      opt.value = keys[j];
+      opt.textContent = keys[j];
+      manageSubjectFilter.appendChild(opt);
+    }
+    if (filterVal && filterVal !== 'all' && subjects[filterVal]) {
+      manageSubjectFilter.value = filterVal;
+    } else {
+      manageSubjectFilter.value = 'all';
+    }
+
+    // Existing subject dropdown
+    manageExistingSubject.innerHTML = '<option value="">选择已有科目...</option>';
+    for (var k = 0; k < keys.length; k++) {
+      var opt2 = document.createElement('option');
+      opt2.value = keys[k];
+      opt2.textContent = keys[k];
+      manageExistingSubject.appendChild(opt2);
+    }
+  }
+
   function showManageModal() {
     manageModal.classList.add('show');
     manageSelected.clear();
+    manageSubjectFilterVal = 'all';
+    populateManageSubjectDropdowns();
     renderManageList();
   }
 
@@ -1176,6 +1528,11 @@
     var all = getAllQuestions();
     for (var i = 0; i < all.length; i++) {
       var q = all[i];
+      var subj = q.subject || '未分类';
+
+      // Filter by subject
+      if (manageSubjectFilterVal !== 'all' && subj !== manageSubjectFilterVal) continue;
+
       var isCustom = edits[q.id] && edits[q.id].custom;
       var isEdited = edits[q.id] && !edits[q.id].custom;
 
@@ -1198,7 +1555,7 @@
 
       var chapter = document.createElement('div');
       chapter.className = 'manage-item-chapter';
-      chapter.textContent = q.chapter;
+      chapter.textContent = subj + ' · ' + q.chapter;
 
       var questionText = document.createElement('div');
       questionText.className = 'manage-item-q';
@@ -1225,6 +1582,45 @@
       item.appendChild(tag);
       manageList.appendChild(item);
     }
+  }
+
+  function manageMoveSubjectFn() {
+    if (manageSelected.size === 0) {
+      alert('请先选择要移动的题目');
+      return;
+    }
+    var newSubject = manageNewSubject.value.trim() || manageExistingSubject.value;
+    if (!newSubject) {
+      alert('请输入新科目名或选择已有科目');
+      return;
+    }
+
+    var count = 0;
+    manageSelected.forEach(function(qid) {
+      // Update in QUESTIONS
+      for (var i = 0; i < QUESTIONS.length; i++) {
+        if (QUESTIONS[i].id === qid) {
+          QUESTIONS[i].subject = newSubject;
+          break;
+        }
+      }
+      // Update in edits
+      if (!edits[qid]) {
+        edits[qid] = {};
+      }
+      edits[qid].subject = newSubject;
+      count++;
+    });
+
+    saveEdits();
+    saveImportedQuestions();
+    populateSubjectSelect();
+    populateChapterSelect();
+    populateManageSubjectDropdowns();
+    renderManageList();
+    manageNewSubject.value = '';
+    manageExistingSubject.value = '';
+    alert('已将 ' + count + ' 道题目移至「' + newSubject + '」');
   }
 
   function manageSelectAllFn() {
@@ -1300,6 +1696,8 @@
     manageSelected.clear();
     if (currentIndex > 0) currentIndex--;
     renderManageList();
+    populateSubjectSelect();
+    populateChapterSelect();
     render();
   }
 
@@ -1321,6 +1719,8 @@
     manageSelected.clear();
     if (currentIndex > 0) currentIndex--;
     hideManageModal();
+    populateSubjectSelect();
+    populateChapterSelect();
     render();
   }
 
@@ -1329,7 +1729,6 @@
   // ============================================
   cardFront.addEventListener('click', flipCard);
   cardBack.addEventListener('click', flipCard);
-  flipBtn.addEventListener('click', flipCard);
   nextBtn.addEventListener('click', nextQuestion);
   prevBtn.addEventListener('click', prevQuestion);
   markBtn.addEventListener('click', toggleMark);
@@ -1378,13 +1777,17 @@
   manageSelectCustom.addEventListener('click', manageSelectCustomFn);
   manageDeleteSelected.addEventListener('click', manageDeleteSelectedFn);
   manageDeleteAllCustom.addEventListener('click', manageDeleteAllCustomFn);
+  manageSubjectFilter.addEventListener('change', function() {
+    manageSubjectFilterVal = manageSubjectFilter.value;
+    renderManageList();
+  });
+  manageMoveBtn.addEventListener('click', manageMoveSubjectFn);
 
   // New features
   darkModeBtn.addEventListener('click', toggleDarkMode);
   searchInput.addEventListener('input', handleSearch);
   modeMastered.addEventListener('click', function() { setMode('mastered'); });
   masteredBtn.addEventListener('click', toggleMastered);
-  learnedBtn.addEventListener('click', increaseLearned);
   learnedDownBtn.addEventListener('click', decreaseLearned);
   learnedUpBtn.addEventListener('click', increaseLearned);
   recycleBinBtn.addEventListener('click', showRecycleModal);
@@ -1393,9 +1796,304 @@
   recycleEmptyBtn.addEventListener('click', emptyRecycleBin);
   recycleRestoreAllBtn.addEventListener('click', restoreAllRecycleBin);
 
+  // More dropdown menu
+  var moreBtn = document.getElementById('moreBtn');
+  var moreDropdown = document.getElementById('moreDropdown');
+  moreBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    moreDropdown.classList.toggle('show');
+  });
+  document.addEventListener('click', function(e) {
+    if (!moreDropdown.contains(e.target) && e.target !== moreBtn) {
+      moreDropdown.classList.remove('show');
+    }
+  });
+  // Close dropdown when selecting an item
+  editBtn.addEventListener('click', function() { moreDropdown.classList.remove('show'); });
+  masteredBtn.addEventListener('click', function() { moreDropdown.classList.remove('show'); });
+
+  // Subject filter
+  subjectSelect.addEventListener('change', function() {
+    currentSubject = subjectSelect.value;
+    currentChapter = 'all';
+    currentIndex = 0;
+    populateChapterSelect();
+    render();
+  });
+
+  // Subject Tree Modal
+  var stExpanded = {};
+
+  function openSubjectTree() {
+    subjectTreeModal.classList.add('show');
+    stAddInput.value = '';
+    renderSubjectTree();
+  }
+
+  function closeSubjectTree() {
+    subjectTreeModal.classList.remove('show');
+  }
+
+  function renderSubjectTree() {
+    stTree.innerHTML = '';
+    var tree = {};
+    var subjectOrder = [];
+    for (var i = 0; i < QUESTIONS.length; i++) {
+      var q = QUESTIONS[i];
+      var subj = getQuestionSubject(q) || '未分类';
+      var ch = (edits[q.id] && edits[q.id].chapter) || q.chapter || '未分类';
+      if (!tree[subj]) { tree[subj] = {}; subjectOrder.push(subj); }
+      if (!tree[subj][ch]) tree[subj][ch] = [];
+      tree[subj][ch].push(q);
+    }
+
+    for (var si = 0; si < subjectOrder.length; si++) {
+      var subjName = subjectOrder[si];
+      var chapters = tree[subjName];
+      var chKeys = Object.keys(chapters);
+      var totalQ = 0;
+      for (var ck = 0; ck < chKeys.length; ck++) totalQ += chapters[chKeys[ck]].length;
+
+      var subjDiv = document.createElement('div');
+      subjDiv.className = 'st-subject';
+      var subjHd = document.createElement('div');
+      subjHd.className = 'st-subject-hd';
+      var arrow = document.createElement('span');
+      arrow.className = 'st-arrow' + (stExpanded['s:'+subjName] ? ' expanded' : '');
+      arrow.textContent = '▶';
+      var label = document.createElement('span');
+      label.className = 'st-label';
+      label.textContent = subjName;
+      var badge = document.createElement('span');
+      badge.className = 'st-badge';
+      badge.textContent = totalQ + '题';
+      var renameBtn = document.createElement('button');
+      renameBtn.className = 'st-rename-btn';
+      renameBtn.textContent = '重命名';
+      (function(sn) {
+        renameBtn.onclick = function(e) {
+          e.stopPropagation();
+          var newName = prompt('重命名「' + sn + '」为：', sn);
+          if (!newName || newName === sn) return;
+          renameSubject(sn, newName);
+        };
+      })(subjName);
+      var delBtn = document.createElement('button');
+      delBtn.className = 'st-del-btn';
+      delBtn.textContent = '✕';
+      delBtn.title = '删除整个科目';
+      (function(sn, cnt) {
+        delBtn.onclick = function(e) {
+          e.stopPropagation();
+          if (!confirm('删除科目「' + sn + '」？' + cnt + ' 道题目将被移入回收站。')) return;
+          deleteSubject(sn);
+        };
+      })(subjName, totalQ);
+
+      subjHd.appendChild(arrow);
+      subjHd.appendChild(label);
+      subjHd.appendChild(badge);
+      subjHd.appendChild(renameBtn);
+      subjHd.appendChild(delBtn);
+
+      var subjBody = document.createElement('div');
+      subjBody.className = 'st-body' + (stExpanded['s:'+subjName] ? ' expanded' : '');
+
+      for (var ci = 0; ci < chKeys.length; ci++) {
+        var chName = chKeys[ci];
+        var questions = chapters[chName];
+        var chDiv = document.createElement('div');
+        chDiv.className = 'st-chapter';
+        var chHd = document.createElement('div');
+        chHd.className = 'st-chapter-hd';
+        var chArrow = document.createElement('span');
+        chArrow.className = 'st-arrow' + (stExpanded['c:'+subjName+':'+chName] ? ' expanded' : '');
+        chArrow.textContent = '▶';
+        var chLabel = document.createElement('span');
+        chLabel.className = 'st-chapter-name';
+        chLabel.textContent = chName;
+        var chBadge = document.createElement('span');
+        chBadge.className = 'st-badge';
+        chBadge.textContent = questions.length;
+        var chDelBtn = document.createElement('button');
+        chDelBtn.className = 'st-del-btn';
+        chDelBtn.textContent = '✕';
+        chDelBtn.title = '删除整个章节';
+        (function(sn, cn, cnt) {
+          chDelBtn.onclick = function(e) {
+            e.stopPropagation();
+            if (!confirm('删除章节「' + cn + '」？' + cnt + ' 道题目将被移入回收站。')) return;
+            deleteChapter(sn, cn);
+          };
+        })(subjName, chName, questions.length);
+
+        chHd.appendChild(chArrow);
+        chHd.appendChild(chLabel);
+        chHd.appendChild(chBadge);
+        chHd.appendChild(chDelBtn);
+
+        var qDiv = document.createElement('div');
+        qDiv.className = 'st-questions' + (stExpanded['c:'+subjName+':'+chName] ? ' expanded' : '');
+        for (var qi = 0; qi < questions.length; qi++) {
+          var qq = questions[qi];
+          var qText = (edits[qq.id] && edits[qq.id].question) || qq.question;
+          var qItem = document.createElement('div');
+          qItem.className = 'st-q-item';
+          var qSpan = document.createElement('span');
+          qSpan.className = 'st-q-text';
+          qSpan.textContent = qText.length > 30 ? qText.substring(0, 30) + '...' : qText;
+          var qDel = document.createElement('button');
+          qDel.className = 'st-q-del';
+          qDel.textContent = '✕';
+          (function(qid) {
+            qDel.onclick = function(e) {
+              e.stopPropagation();
+              deleteSingleQuestionST(qid);
+            };
+          })(qq.id);
+          qItem.appendChild(qSpan);
+          qItem.appendChild(qDel);
+          qDiv.appendChild(qItem);
+        }
+
+        (function(cn, sn, hd, arr, body) {
+          hd.onclick = function() {
+            var key = 'c:'+sn+':'+cn;
+            stExpanded[key] = !stExpanded[key];
+            arr.classList.toggle('expanded', stExpanded[key]);
+            body.classList.toggle('expanded', stExpanded[key]);
+          };
+        })(chName, subjName, chHd, chArrow, qDiv);
+
+        chDiv.appendChild(chHd);
+        chDiv.appendChild(qDiv);
+        subjBody.appendChild(chDiv);
+      }
+
+      (function(sn, hd, arr, body) {
+        hd.onclick = function() {
+          stExpanded['s:'+sn] = !stExpanded['s:'+sn];
+          arr.classList.toggle('expanded', stExpanded['s:'+sn]);
+          body.classList.toggle('expanded', stExpanded['s:'+sn]);
+        };
+      })(subjName, subjHd, arrow, subjBody);
+
+      subjDiv.appendChild(subjHd);
+      subjDiv.appendChild(subjBody);
+      stTree.appendChild(subjDiv);
+    }
+  }
+
+  function renameSubject(oldName, newName) {
+    for (var i = 0; i < QUESTIONS.length; i++) {
+      if ((getQuestionSubject(QUESTIONS[i]) || '未分类') === oldName) {
+        if (!edits[QUESTIONS[i].id]) edits[QUESTIONS[i].id] = {};
+        edits[QUESTIONS[i].id].subject = newName;
+      }
+    }
+    saveEdits(); saveImportedQuestions();
+    if (currentSubject === oldName) currentSubject = newName;
+    populateSubjectSelect(); populateChapterSelect();
+    renderSubjectTree(); render();
+  }
+
+  function deleteSubject(subjName) {
+    var ids = [];
+    for (var i = 0; i < QUESTIONS.length; i++) {
+      if ((getQuestionSubject(QUESTIONS[i]) || '未分类') === subjName) ids.push(QUESTIONS[i].id);
+    }
+    batchDeleteQuestions(ids);
+    if (currentSubject === subjName) currentSubject = 'all';
+    populateSubjectSelect(); populateChapterSelect();
+    renderSubjectTree(); render();
+  }
+
+  function deleteChapter(subjName, chName) {
+    var ids = [];
+    for (var i = 0; i < QUESTIONS.length; i++) {
+      var s = getQuestionSubject(QUESTIONS[i]) || '未分类';
+      var c = (edits[QUESTIONS[i].id] && edits[QUESTIONS[i].id].chapter) || QUESTIONS[i].chapter || '未分类';
+      if (s === subjName && c === chName) ids.push(QUESTIONS[i].id);
+    }
+    batchDeleteQuestions(ids);
+    populateSubjectSelect(); populateChapterSelect();
+    renderSubjectTree(); render();
+  }
+
+  function deleteSingleQuestionST(qid) {
+    batchDeleteQuestions([qid]);
+    populateSubjectSelect(); populateChapterSelect();
+    renderSubjectTree(); render();
+  }
+
+  function batchDeleteQuestions(ids) {
+    for (var i = 0; i < ids.length; i++) {
+      var qid = ids[i];
+      for (var j = QUESTIONS.length - 1; j >= 0; j--) {
+        if (QUESTIONS[j].id === qid) { recycleBin.push(QUESTIONS[j]); QUESTIONS.splice(j, 1); break; }
+      }
+      delete edits[qid]; delete notes[qid];
+      var m = state.marked.indexOf(qid); if (m !== -1) state.marked.splice(m, 1);
+      var v = state.viewed.indexOf(qid); if (v !== -1) state.viewed.splice(v, 1);
+      if (state.mastered) { var ma = state.mastered.indexOf(qid); if (ma !== -1) state.mastered.splice(ma, 1); }
+      if (state.learnedCounts) delete state.learnedCounts[qid];
+    }
+    if (currentIndex > 0) currentIndex -= Math.min(currentIndex, ids.length);
+    saveState(); saveEdits(); saveNotes(); saveRecycleBin(); saveImportedQuestions();
+  }
+
+  stAddBtn.addEventListener('click', function() {
+    var name = stAddInput.value.trim();
+    if (!name) { alert('请输入科目名称'); return; }
+    for (var i = 0; i < QUESTIONS.length; i++) {
+      if (getQuestionSubject(QUESTIONS[i]) === name) { alert('科目「' + name + '」已存在'); return; }
+    }
+    var maxId = 0;
+    for (var j = 0; j < QUESTIONS.length; j++) { if (QUESTIONS[j].id > maxId) maxId = QUESTIONS[j].id; }
+    var newQ = { id: maxId + 1, subject: name, chapter: '未分类', question: '（空题目，可删除）', answer: '请添加内容', source: '' };
+    QUESTIONS.push(newQ);
+    edits[newQ.id] = { subject: name, chapter: '未分类', question: newQ.question, answer: newQ.answer, source: '', custom: true };
+    saveEdits(); saveImportedQuestions();
+    stExpanded['s:'+name] = true;
+    populateSubjectSelect(); populateChapterSelect();
+    stAddInput.value = '';
+    renderSubjectTree(); render();
+  });
+
+  manageSubjectBtn.addEventListener('click', openSubjectTree);
+  subjectTreeClose.addEventListener('click', closeSubjectTree);
+  subjectTreeModal.addEventListener('click', function(e) { if (e.target === subjectTreeModal) closeSubjectTree(); });
+
+  // Chapter filter
+  chapterSelect.addEventListener('change', function() {
+    currentChapter = chapterSelect.value;
+    currentIndex = 0;
+    render();
+  });
+
+  // Learned popup - mobile tap toggle
+  learnedBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (window.innerWidth <= 768) {
+      learnedPopup.classList.toggle('show');
+    } else {
+      increaseLearned();
+    }
+  });
+  document.addEventListener('click', function(e) {
+    if (!learnedWrapper.contains(e.target)) {
+      learnedPopup.classList.remove('show');
+    }
+  });
+
   // Sidebar toggle
   menuBtn.addEventListener('click', function() { sidebar.classList.add('open'); });
   sidebarClose.addEventListener('click', function() { sidebar.classList.remove('open'); });
+
+  // About modal
+  aboutBtn.addEventListener('click', function() { aboutModal.classList.add('show'); });
+  aboutClose.addEventListener('click', function() { aboutModal.classList.remove('show'); });
+  aboutModal.addEventListener('click', function(e) { if (e.target === aboutModal) aboutModal.classList.remove('show'); });
 
   // Keyboard shortcuts
   document.addEventListener('keydown', function(e) {
@@ -1423,6 +2121,8 @@
   // Initialize
   // ============================================
   loadImportedQuestions();
+  populateSubjectSelect();
+  populateChapterSelect();
 
   // Apply saved settings
   if (settings.darkMode) {
