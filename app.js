@@ -841,9 +841,22 @@
       subjectCount.className = 'chapter-count';
       subjectCount.textContent = totalInSubject;
 
+      // Rename button for subject
+      var subjectRenameBtn = document.createElement('button');
+      subjectRenameBtn.className = 'subject-rename-btn' + (subjectName === '未分类' ? ' uncategorized' : '');
+      subjectRenameBtn.textContent = '✏️';
+      subjectRenameBtn.title = subjectName === '未分类' ? '点击重命名未分类科目' : '重命名科目';
+      (function(sn, btn) {
+        btn.onclick = function(e) {
+          e.stopPropagation();
+          showInlineRename(sn, btn);
+        };
+      })(subjectName, subjectRenameBtn);
+
       subjectHeader.appendChild(subjectArrow);
       subjectHeader.appendChild(subjectLabel);
       subjectHeader.appendChild(subjectCount);
+      subjectHeader.appendChild(subjectRenameBtn);
 
       var subjectBody = document.createElement('div');
       subjectBody.className = 'chapter-items' + (expandedSections['s:'+subjectName] ? ' expanded' : '');
@@ -1891,14 +1904,12 @@
       var renameBtn = document.createElement('button');
       renameBtn.className = 'st-rename-btn';
       renameBtn.textContent = '重命名';
-      (function(sn) {
-        renameBtn.onclick = function(e) {
+      (function(sn, btn) {
+        btn.onclick = function(e) {
           e.stopPropagation();
-          var newName = prompt('重命名「' + sn + '」为：', sn);
-          if (!newName || newName === sn) return;
-          renameSubject(sn, newName);
+          showInlineRenameInModal(sn, btn);
         };
-      })(subjName);
+      })(subjName, renameBtn);
       var delBtn = document.createElement('button');
       delBtn.className = 'st-del-btn';
       delBtn.textContent = '✕';
@@ -2016,6 +2027,164 @@
     if (currentSubject === oldName) currentSubject = newName;
     populateSubjectSelect(); populateChapterSelect();
     renderSubjectTree(); render();
+  }
+
+  // Inline rename (mobile-friendly, no prompt)
+  var currentRenameWrapper = null;
+
+  function showInlineRename(oldName, triggerBtn) {
+    // Remove any existing rename input
+    hideInlineRename();
+
+    var wrapper = document.createElement('div');
+    wrapper.className = 'rename-input-wrapper';
+
+    var input = document.createElement('input');
+    input.className = 'rename-input';
+    input.type = 'text';
+    input.value = oldName;
+    input.placeholder = '输入新科目名';
+
+    var confirmBtn = document.createElement('button');
+    confirmBtn.className = 'rename-confirm-btn';
+    confirmBtn.textContent = '确定';
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'rename-cancel-btn';
+    cancelBtn.textContent = '取消';
+
+    wrapper.appendChild(input);
+    wrapper.appendChild(confirmBtn);
+    wrapper.appendChild(cancelBtn);
+
+    // Insert after the subject header
+    var header = triggerBtn.closest('.chapter-header') || triggerBtn.closest('.st-subject-hd');
+    if (header) {
+      header.parentNode.insertBefore(wrapper, header.nextSibling);
+    }
+
+    // Focus input
+    input.focus();
+    input.select();
+
+    // Confirm action
+    function doRename() {
+      var newName = input.value.trim();
+      if (!newName || newName === oldName) {
+        hideInlineRename();
+        return;
+      }
+      renameSubject(oldName, newName);
+      hideInlineRename();
+    }
+
+    // Event listeners
+    confirmBtn.onclick = function(e) {
+      e.stopPropagation();
+      doRename();
+    };
+
+    cancelBtn.onclick = function(e) {
+      e.stopPropagation();
+      hideInlineRename();
+    };
+
+    input.onkeydown = function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        doRename();
+      } else if (e.key === 'Escape') {
+        hideInlineRename();
+      }
+    };
+
+    currentRenameWrapper = wrapper;
+  }
+
+  function hideInlineRename() {
+    if (currentRenameWrapper) {
+      currentRenameWrapper.remove();
+      currentRenameWrapper = null;
+    }
+  }
+
+  // Inline rename for subject tree modal
+  var currentModalRenameWrapper = null;
+
+  function showInlineRenameInModal(oldName, triggerBtn) {
+    // Remove any existing rename input
+    hideInlineRenameInModal();
+
+    var wrapper = document.createElement('div');
+    wrapper.className = 'rename-input-wrapper';
+
+    var input = document.createElement('input');
+    input.className = 'rename-input';
+    input.type = 'text';
+    input.value = oldName;
+    input.placeholder = '输入新科目名';
+
+    var confirmBtn = document.createElement('button');
+    confirmBtn.className = 'rename-confirm-btn';
+    confirmBtn.textContent = '确定';
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'rename-cancel-btn';
+    cancelBtn.textContent = '取消';
+
+    wrapper.appendChild(input);
+    wrapper.appendChild(confirmBtn);
+    wrapper.appendChild(cancelBtn);
+
+    // Insert after the subject header in modal
+    var header = triggerBtn.closest('.st-subject-hd');
+    if (header) {
+      header.parentNode.insertBefore(wrapper, header.nextSibling);
+    }
+
+    // Focus input
+    input.focus();
+    input.select();
+
+    // Confirm action
+    function doRename() {
+      var newName = input.value.trim();
+      if (!newName || newName === oldName) {
+        hideInlineRenameInModal();
+        return;
+      }
+      renameSubject(oldName, newName);
+      hideInlineRenameInModal();
+    }
+
+    // Event listeners
+    confirmBtn.onclick = function(e) {
+      e.stopPropagation();
+      doRename();
+    };
+
+    cancelBtn.onclick = function(e) {
+      e.stopPropagation();
+      hideInlineRenameInModal();
+    };
+
+    input.onkeydown = function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        doRename();
+      } else if (e.key === 'Escape') {
+        hideInlineRenameInModal();
+      }
+    };
+
+    currentModalRenameWrapper = wrapper;
+  }
+
+  function hideInlineRenameInModal() {
+    if (currentModalRenameWrapper) {
+      currentModalRenameWrapper.remove();
+      currentModalRenameWrapper = null;
+    }
   }
 
   function deleteSubject(subjName) {
