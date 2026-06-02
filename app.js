@@ -510,7 +510,8 @@
       filtered = filtered.filter(function(q) {
         return q.question.toLowerCase().indexOf(searchQuery) !== -1 ||
                q.answer.toLowerCase().indexOf(searchQuery) !== -1 ||
-               q.chapter.toLowerCase().indexOf(searchQuery) !== -1;
+               q.chapter.toLowerCase().indexOf(searchQuery) !== -1 ||
+               (q.subject || '').toLowerCase().indexOf(searchQuery) !== -1;
       });
     }
 
@@ -596,8 +597,20 @@
   // ============================================
   function render() {
     var filtered = getFilteredQuestions();
+
+    // Update search count indicator
+    if (searchCountEl) {
+      if (searchQuery) {
+        if (searchCountText) searchCountText.textContent = '找到 ' + filtered.length + ' 道题';
+        if (searchToggleBtn) searchToggleBtn.textContent = searchCollapsed ? '▶' : '▼';
+        searchCountEl.style.display = 'flex';
+      } else {
+        searchCountEl.style.display = 'none';
+      }
+    }
+
     if (filtered.length === 0) {
-      cardQuestion.textContent = currentMode === 'marked' ? '还没有标记任何题目' : '所有题目都已学习完毕！';
+      cardQuestion.textContent = searchQuery ? '没有找到匹配的题目' : (currentMode === 'marked' ? '还没有标记任何题目' : '所有题目都已学习完毕！');
       cardAnswer.textContent = '';
       cardSource.textContent = '';
       cardChapter.textContent = '';
@@ -608,6 +621,7 @@
       if (fbArea) fbArea.style.display = 'none';
       var typeArea = document.getElementById('typingArea');
       if (typeArea) typeArea.style.display = 'none';
+      renderQuestionList();
       return;
     }
 
@@ -1217,11 +1231,93 @@
   }
 
   // Search
+  var searchCountEl = document.getElementById('searchCount');
+  var searchCountText = document.getElementById('searchCountText');
+  var searchResultsEl = document.getElementById('searchResults');
+  var searchToggleBtn = document.getElementById('searchToggleBtn');
+  var searchCollapsed = false;
+
+  function highlightText(text, query) {
+    if (!query) return escapeHtml(text);
+    var lower = text.toLowerCase();
+    var idx = lower.indexOf(query);
+    if (idx === -1) return escapeHtml(text);
+    var before = text.substring(0, idx);
+    var match = text.substring(idx, idx + query.length);
+    var after = text.substring(idx + query.length);
+    return escapeHtml(before) + '<span class="result-highlight">' + escapeHtml(match) + '</span>' + escapeHtml(after);
+  }
+
+  function renderSearchResults() {
+    if (!searchResultsEl) return;
+    if (!searchQuery) {
+      searchResultsEl.innerHTML = '';
+      searchResultsEl.classList.remove('show');
+      searchCollapsed = false;
+      return;
+    }
+    var filtered = getFilteredQuestions();
+    if (filtered.length === 0) {
+      searchResultsEl.innerHTML = '<div class="search-result-item" style="color:var(--text-muted);cursor:default;">没有匹配的题目</div>';
+      searchResultsEl.classList.add('show');
+      return;
+    }
+    if (searchCollapsed) {
+      searchResultsEl.classList.remove('show');
+      return;
+    }
+    var html = '';
+    var maxShow = Math.min(filtered.length, 50);
+    for (var i = 0; i < maxShow; i++) {
+      var q = filtered[i];
+      var globalIdx = i;
+      var questionPreview = q.question.length > 60 ? q.question.substring(0, 60) + '...' : q.question;
+      html += '<div class="search-result-item" data-idx="' + globalIdx + '">' +
+        highlightText(questionPreview, searchQuery) +
+        '<div class="result-chapter">' + escapeHtml(q.chapter) + '</div>' +
+        '</div>';
+    }
+    if (filtered.length > maxShow) {
+      html += '<div class="search-result-item" style="color:var(--text-muted);cursor:default;">还有 ' + (filtered.length - maxShow) + ' 道题...</div>';
+    }
+    searchResultsEl.innerHTML = html;
+    searchResultsEl.classList.add('show');
+
+    // Bind click events
+    var items = searchResultsEl.querySelectorAll('.search-result-item[data-idx]');
+    for (var j = 0; j < items.length; j++) {
+      items[j].addEventListener('click', function() {
+        var idx = parseInt(this.getAttribute('data-idx'), 10);
+        currentIndex = idx;
+        render();
+      });
+    }
+  }
+
   function handleSearch() {
     searchQuery = searchInput.value.trim().toLowerCase();
     currentIndex = 0;
+    searchCollapsed = false;
     render();
+    renderSearchResults();
   }
+
+  // Toggle search results collapse/expand
+  if (searchToggleBtn) {
+    searchToggleBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      searchCollapsed = !searchCollapsed;
+      searchToggleBtn.textContent = searchCollapsed ? '▶' : '▼';
+      renderSearchResults();
+    });
+  }
+
+  // Close search results when clicking outside
+  document.addEventListener('click', function(e) {
+    if (searchResultsEl && !searchResultsEl.contains(e.target) && e.target !== searchInput && e.target !== searchToggleBtn) {
+      searchResultsEl.classList.remove('show');
+    }
+  });
 
   // Recycle bin
   function showRecycleModal() {
