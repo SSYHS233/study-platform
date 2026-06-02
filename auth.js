@@ -108,8 +108,8 @@ var SSYHSAuth = (function() {
       '.auth-info-start-btn:hover{opacity:0.88;transform:translateY(-1px)}' +
       '.auth-info-note{font-size:12px;color:var(--text-muted);text-align:center;margin-top:12px}' +
 
-      '.auth-help-modal{max-width:480px;max-height:85vh}' +
-      '.auth-help-content{max-height:calc(85vh - 80px);overflow-y:auto;margin-top:8px}' +
+      '.auth-help-modal{max-width:480px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden}' +
+      '.auth-help-content{flex:1;overflow-y:auto;margin-top:8px;-webkit-overflow-scrolling:touch}' +
       '.auth-help-section{margin-bottom:14px}' +
       '.auth-help-section-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--border)}' +
       '.auth-help-item{font-size:13px;color:var(--text-secondary);line-height:1.6;padding:2px 0}' +
