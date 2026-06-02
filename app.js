@@ -161,6 +161,7 @@
     try {
       localStorage.setItem('study-platform-state', JSON.stringify(state));
     } catch(e) {}
+    if (typeof SSYHSAuth !== 'undefined') SSYHSAuth.debouncedSyncToGist();
   }
 
   // Save imported questions to localStorage
@@ -184,6 +185,7 @@
       }
       localStorage.setItem('study-platform-subjects', JSON.stringify(subjectOverrides));
     } catch(e) {}
+    if (typeof SSYHSAuth !== 'undefined') SSYHSAuth.debouncedSyncToGist();
   }
 
   // Load imported questions from localStorage
@@ -246,6 +248,7 @@
     try {
       localStorage.setItem('study-platform-edits', JSON.stringify(edits));
     } catch(e) {}
+    if (typeof SSYHSAuth !== 'undefined') SSYHSAuth.debouncedSyncToGist();
   }
 
   // Notes management
@@ -261,6 +264,7 @@
     try {
       localStorage.setItem('study-platform-notes', JSON.stringify(notes));
     } catch(e) {}
+    if (typeof SSYHSAuth !== 'undefined') SSYHSAuth.debouncedSyncToGist();
   }
 
   // Recycle bin
@@ -276,6 +280,7 @@
     try {
       localStorage.setItem('study-platform-recycle', JSON.stringify(recycleBin));
     } catch(e) {}
+    if (typeof SSYHSAuth !== 'undefined') SSYHSAuth.debouncedSyncToGist();
   }
 
   function addToRecycleBin(q) {
@@ -309,6 +314,7 @@
     try {
       localStorage.setItem('study-platform-settings', JSON.stringify(settings));
     } catch(e) {}
+    if (typeof SSYHSAuth !== 'undefined') SSYHSAuth.debouncedSyncToGist();
   }
 
   // Get question with edits applied
@@ -2409,6 +2415,9 @@
   loadImportedQuestions();
   populateSubjectSelect();
   populateChapterSelect();
+
+  // Auth init
+  if (typeof SSYHSAuth !== 'undefined') SSYHSAuth.init();
 
   // Apply saved settings
   if (settings.darkMode) {
